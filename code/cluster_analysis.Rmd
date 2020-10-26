@@ -1,0 +1,672 @@
+---
+title: "Untitled"
+author: "Nikos Patias"
+date: "10/07/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r setup, include=FALSE}
+library(sf)
+
+# 1. Read in the FUA grids
+FUAs <- st_read("../data/layers/grids.gpkg")
+
+# if we want we can subset the dataset only to the FUA that we are interested
+FUAs <- subset(FUAs, fuaname %in% c("London","Manchester",
+                                    "West Midlands urban area","Leeds",
+                                    "Glasgow","Liverpool",
+                                    "Southampton","Newcastle upon Tyne",
+                                    "Nottingham","Sheffield",
+                                    "Bristol","Edinburgh"))
+
+# use Birmingham as it is easier to report
+FUAs$fuaname[FUAs$fuaname == "West Midlands urban area"] <- "Birmingham"
+
+
+```
+
+
+
+## read the data
+```{r}
+
+# Read all the RDS files with gridded data
+data_2001 <- readRDS(file = "../data/gridded_data/full_data_2001.Rds")
+data_2006 <- readRDS(file = "../data/gridded_data/full_data_2006.Rds")
+data_2011 <- readRDS(file = "../data/gridded_data/full_data_2011.Rds")
+data_2016 <- readRDS(file = "../data/gridded_data/full_data_2016.Rds")
+
+# treat the dataset as dataframe
+st_geometry(data_2001) <- NULL
+st_geometry(data_2006) <- NULL
+st_geometry(data_2011) <- NULL
+st_geometry(data_2016) <- NULL
+
+
+
+# source the functions for composite index function
+source('Composite_index_function.R')
+
+# source the functions for creating plots
+source('plot_functions.R')
+
+# source for helper functions
+source('helpers.R')
+
+library(dplyr)
+library(psych)
+library(tidyr) # this is used for drop_na()
+library(RColorBrewer)
+library(leaflet)
+library(leaflet.extras)
+
+# run the composite index function
+CI_2001 <- Comp_ind(data_2001, FUAs, "2001")
+CI_2006 <- Comp_ind(data_2006, FUAs, "2006")
+CI_2011 <- Comp_ind(data_2011, FUAs, "2011")
+CI_2016 <- Comp_ind(data_2016, FUAs, "2016")
+
+
+
+
+library(ggplot2)
+library(reshape2)
+
+#run the function to produce plots
+plots_2001 <- FUA_decile_plot(CI_2001$Comp_ind, "2001")
+plots_2006 <- FUA_decile_plot(CI_2006$Comp_ind, "2006")
+plots_2011 <- FUA_decile_plot(CI_2011$Comp_ind, "2011")
+plots_2016 <- FUA_decile_plot(CI_2016$Comp_ind, "2016") 
+```
+
+## Calculate the difference in variables between 2016 and 2001
+
+For all the variables I calculate % difference but for the index score the absolute difference
+```{r}
+
+data_2016_needed <- plots_2016$Grids_deciles[,c("ID", "Cmp_rnk_deciles", "GreenSp_deciles", "Wlkb_rnk_deciles", "built_index_rank_deciles")]
+
+data_2011_needed <- plots_2011$Grids_deciles[,c("ID", "Cmp_rnk_deciles", "GreenSp_deciles", "Wlkb_rnk_deciles", "built_index_rank_deciles")]
+
+data_2006_needed <- plots_2006$Grids_deciles[,c("ID", "Cmp_rnk_deciles", "GreenSp_deciles", "Wlkb_rnk_deciles", "built_index_rank_deciles")]
+
+data_2001_needed <- plots_2001$Grids_deciles[,c("ID", "Cmp_rnk_deciles", "GreenSp_deciles", "Wlkb_rnk_deciles", "built_index_rank_deciles")]
+
+
+```
+
+
+
+```{r}
+combined_01_16 <- left_join(data_2016_needed, data_2001_needed, by = "ID")
+combined_01_16$diff01_16_decile <- combined_01_16$built_index_rank_deciles.x - combined_01_16$built_index_rank_deciles.y
+combined_01_16$diff01_16_decile_compact <- combined_01_16$Cmp_rnk_deciles.x - combined_01_16$Cmp_rnk_deciles.y
+combined_01_16$diff01_16_decile_grsp <- combined_01_16$GreenSp_deciles.x - combined_01_16$GreenSp_deciles.y
+combined_01_16$diff01_16_decile_wlk <- combined_01_16$Wlkb_rnk_deciles.x - combined_01_16$Wlkb_rnk_deciles.y
+
+cols <- c("ID", "diff01_16_decile", "diff01_16_decile_compact", "diff01_16_decile_grsp", "diff01_16_decile_wlk")
+
+combined_01_16 <-  combined_01_16[,cols]
+```
+
+
+```{r}
+combined_01_06 <- left_join(data_2006_needed, data_2001_needed, by = "ID")
+combined_01_06$diff01_06_decile <- combined_01_06$built_index_rank_deciles.x - combined_01_06$built_index_rank_deciles.y
+combined_01_06$diff01_06_decile_compact <- combined_01_06$Cmp_rnk_deciles.x - combined_01_06$Cmp_rnk_deciles.y
+combined_01_06$diff01_06_decile_grsp <- combined_01_06$GreenSp_deciles.x - combined_01_06$GreenSp_deciles.y
+combined_01_06$diff01_06_decile_wlk <- combined_01_06$Wlkb_rnk_deciles.x - combined_01_06$Wlkb_rnk_deciles.y
+
+cols <- c("ID", "diff01_06_decile", "diff01_06_decile_compact", "diff01_06_decile_grsp", "diff01_06_decile_wlk")
+
+combined_01_06 <-  combined_01_06[,cols]
+```
+
+```{r}
+combined_06_11 <- left_join(data_2011_needed, data_2006_needed, by = "ID")
+combined_06_11$diff06_11_decile <- combined_06_11$built_index_rank_deciles.x - combined_06_11$built_index_rank_deciles.y
+combined_06_11$diff06_11_decile_compact <- combined_06_11$Cmp_rnk_deciles.x - combined_06_11$Cmp_rnk_deciles.y
+combined_06_11$diff06_11_decile_grsp <- combined_06_11$GreenSp_deciles.x - combined_06_11$GreenSp_deciles.y
+combined_06_11$diff06_11_decile_wlk <- combined_06_11$Wlkb_rnk_deciles.x - combined_06_11$Wlkb_rnk_deciles.y
+
+cols <- c("ID", "diff06_11_decile", "diff06_11_decile_compact", "diff06_11_decile_grsp", "diff06_11_decile_wlk")
+
+combined_06_11 <-  combined_06_11[,cols]
+```
+
+
+```{r}
+combined_11_16 <- left_join(data_2016_needed, data_2011_needed, by = "ID")
+combined_11_16$diff11_16_decile <- combined_11_16$built_index_rank_deciles.x - combined_11_16$built_index_rank_deciles.y
+combined_11_16$diff11_16_decile_compact <- combined_11_16$Cmp_rnk_deciles.x - combined_11_16$Cmp_rnk_deciles.y
+combined_11_16$diff11_16_decile_grsp <- combined_11_16$GreenSp_deciles.x - combined_11_16$GreenSp_deciles.y
+combined_11_16$diff11_16_decile_wlk <- combined_11_16$Wlkb_rnk_deciles.x - combined_11_16$Wlkb_rnk_deciles.y
+
+cols <- c("ID", "diff11_16_decile", "diff11_16_decile_compact", "diff11_16_decile_grsp", "diff11_16_decile_wlk")
+
+combined_11_16 <-  combined_11_16[,cols]
+```
+
+
+
+```{r}
+all_years <- left_join(combined_01_16, combined_01_06, by = "ID")
+all_years <- left_join(all_years, combined_06_11, by = "ID")
+all_years <- left_join(all_years, combined_11_16, by = "ID")
+str(all_years)
+```
+
+
+# In this section is for creating cluster analysis for the grids that moved up or down one or more deciles in the composite index ranking from 2001 to 2016
+
+
+```{r}
+
+set1 <- subset(all_years, diff01_16_decile >= 1)
+set2 <- subset(all_years, diff01_16_decile <= -1)
+
+
+quantile(set1$diff01_16_decile, prob = seq(0, 1, length = 11), type = 5)
+quantile(set2$diff01_16_decile, prob = seq(0, 1, length = 11), type = 5)
+
+nrow(set1)
+nrow(set2)
+```
+
+I select the top 10% of the changes for those who changes either positively or negatively.
+For the ones moved down in decile from 1865 grids I selected 258
+For the ones moved up in decile from 2401 grids I selected 306
+
+```{r}
+# subset the grids that increased or decreased in the ranking 
+combined_01_16_subset1 <- subset(all_years, diff01_16_decile >= 4)
+combined_01_16_subset2 <- subset(all_years, diff01_16_decile <= -3)
+
+
+library(tidyr)
+combined_01_16_subset1 <-combined_01_16_subset1 %>% 
+  drop_na()
+
+combined_01_16_subset2 <-combined_01_16_subset2 %>% 
+  drop_na()
+
+```
+
+
+
+
+## This part is for the grids that moved down 4 or more deciles in the ranking
+
+```{r}
+df <- combined_01_16_subset1
+
+library(cluster)
+
+library(factoextra)
+set.seed(123)
+fviz_nbclust(df[-1], kmeans, method = "wss")
+fviz_nbclust(df[-1], kmeans, method = "silhouette")
+
+
+# Compute k-means clustering with k = 4
+set.seed(123)
+final <- kmeans(df[-1], 4, nstart = 25, iter.max = 1000)
+
+fviz_cluster(final, data = df[-1])
+```
+
+
+
+```{r}
+# summarise clusters
+library(tidyverse)
+cl_median <- df[-1] %>%
+  mutate(Cluster = final$cluster) %>%
+  group_by(Cluster) %>%
+  summarise_all("median")
+
+
+cl_mean <- df[-1] %>%
+  mutate(Cluster = final$cluster) %>%
+  group_by(Cluster) %>%
+  summarise_all("mean")
+
+
+cl_sd <- df[-1] %>%
+  mutate(Cluster = final$cluster) %>%
+  group_by(Cluster) %>%
+  summarise_all("sd")
+
+```
+
+
+
+```{r}
+#convert the summary tables from long to wide format
+library(tidyr)
+
+median_down <- gather(cl_median, variable, median, diff01_16_decile:diff11_16_decile_wlk, factor_key=TRUE)
+mean_down <- gather(cl_mean, variable, mean, diff01_16_decile:diff11_16_decile_wlk, factor_key=TRUE)
+sd_down <- gather(cl_sd, variable, sd, diff01_16_decile:diff11_16_decile_wlk, factor_key=TRUE)
+
+# combine them all in one dataframe
+down_summary <- cbind(median_down, mean_down[,3], sd_down[,3])
+
+
+# rename the variables
+# I used levels as it is a factor, which helps to order the plot
+levels(median_down$variable)[levels(median_down$variable)=="diff01_16_decile"] <- "SUDI 2016-2001"
+levels(median_down$variable)[levels(median_down$variable)=="diff01_16_decile_compact"] <- "Compactness Domain 2016-2001"
+levels(median_down$variable)[levels(median_down$variable)=="diff01_16_decile_grsp"] <- "Green/Open Space Domain 2016-2001"
+levels(median_down$variable)[levels(median_down$variable)=="diff01_16_decile_wlk"] <- "Walkability Domain 2016-2001"
+
+levels(median_down$variable)[levels(median_down$variable)=="diff01_06_decile"] <- "SUDI 2006-2001"
+levels(median_down$variable)[levels(median_down$variable)=="diff01_06_decile_compact"] <- "Compactness Domain 2006-2001"
+levels(median_down$variable)[levels(median_down$variable)=="diff01_06_decile_grsp"] <- "Green/Open Space Domain 2006-2001"
+levels(median_down$variable)[levels(median_down$variable)=="diff01_06_decile_wlk"] <- "Walkability Domain 2006-2001"
+
+levels(median_down$variable)[levels(median_down$variable)=="diff06_11_decile"] <- "SUDI 2011-2006"
+levels(median_down$variable)[levels(median_down$variable)=="diff06_11_decile_compact"] <- "Compactness Domain 2011-2006"
+levels(median_down$variable)[levels(median_down$variable)=="diff06_11_decile_grsp"] <- "Green/Open Space Domain 2011-2006"
+levels(median_down$variable)[levels(median_down$variable)=="diff06_11_decile_wlk"] <- "Walkability Domain 2011-2006"
+
+levels(median_down$variable)[levels(median_down$variable)=="diff11_16_decile"] <- "SUDI 2016-2011"
+levels(median_down$variable)[levels(median_down$variable)=="diff11_16_decile_compact"] <- "Compactness Domain 2016-2011"
+levels(median_down$variable)[levels(median_down$variable)=="diff11_16_decile_grsp"] <- "Green/Open Space Domain 2016-2011"
+levels(median_down$variable)[levels(median_down$variable)=="diff11_16_decile_wlk"] <- "Walkability Domain 2016-2011"
+
+# I create the plot further down the code
+
+
+```
+
+
+
+
+```{r}
+# add an extra column indicating the cluster
+df_temp_cl <- df %>%
+  mutate(Cluster = final$cluster)
+
+# count points by cluster
+df_temp_cl %>% 
+  count(Cluster)
+
+```
+
+```{r}
+library(dplyr)
+df_temp_cl_geo <- left_join(CI_2001$Domains_rank[,c("ID")], df_temp_cl, by = "ID")
+
+library(tidyr)
+df_temp_cl_geo <- df_temp_cl_geo %>% 
+  drop_na(Cluster)
+
+
+```
+
+
+
+
+```{r}
+library(tmap)
+tmap_mode("view")
+
+map1 <- tm_shape(df_temp_cl_geo) +
+  tm_fill("Cluster", style = "cat", 
+          palette = "Set1",
+          alpha = 0.7, title = 'Clusters for grids moved down in SUDI ranking',
+          showNA = FALSE,
+          legend.hist = TRUE,
+          labels = c("D1", "D2", "D3","D4")) +
+  tm_basemap("CartoDB.DarkMatter")
+
+tmap_save(map1,
+          width = 1500, height = 1500,
+          dpi = 300, filename = "../outputs/Clusters for grids moved down in SUDI ranking.html")
+```
+
+
+Plot an inset map
+```{r}
+# specify the crs
+WGS84 = "+init=epsg:4326"
+# transform the geospatial file to wgs84
+df_temp_cl_geoWGS <- st_transform(df_temp_cl_geo,WGS84)
+
+
+library(tmaptools)
+library(raster)
+# identify the bbox for the inset map showing the Ferguslie park
+bb_select <- bb(extent(-4.479933,-4.425001,55.832545,55.858216), projection = WGS84)
+
+
+
+
+```
+
+```{r}
+library("OpenStreetMap")
+tile_1 <- read_osm(bb_select, ext=1.1)
+
+```
+
+
+```{r}
+
+tmap_mode("plot")
+Ferguslie_map <- tm_shape(tile_1) +
+  tm_rgb()+
+  tm_shape(df_temp_cl_geoWGS, bbox = bb_select) +
+  tm_fill("Cluster", style = "cat", 
+          palette = "Set1",
+          alpha = 0.7, title = '',
+          showNA = FALSE,legend.show = TRUE,
+          labels = c("D1", "D2", "D3","D4")) +
+  tm_layout(fontfamily = 'Avenir Next Condensed',
+            legend.text.color = "black",
+            legend.text.size = 1,
+            main.title = "B. Ferguslie Park-Glasgow",
+            title.size = 1,
+            title.bg.color = TRUE,
+            legend.position = c("right","top"))
+
+
+png("../outputs/Ferguslie_map.png",units="in", width=15, height=10, res=300)
+Ferguslie_map
+dev.off() # Close the file
+
+
+```
+
+
+
+
+## This part is for the grids that moved up 3 or more deciles in the ranking
+
+```{r}
+df <- combined_01_16_subset2
+
+library(cluster)
+
+library(factoextra)
+set.seed(123)
+fviz_nbclust(df[-1], kmeans, method = "wss")
+fviz_nbclust(df[-1], kmeans, method = "silhouette")
+
+
+# Compute k-means clustering with k = 4
+set.seed(123)
+final <- kmeans(df[-1], 4, nstart = 25, iter.max = 1000)
+
+fviz_cluster(final, data = df[-1])
+```
+
+
+
+```{r}
+# summarise clusters
+library(tidyverse)
+cl_median <- df[-1] %>%
+  mutate(Cluster = final$cluster) %>%
+  group_by(Cluster) %>%
+  summarise_all("median")
+
+
+cl_mean <- df[-1] %>%
+  mutate(Cluster = final$cluster) %>%
+  group_by(Cluster) %>%
+  summarise_all("mean")
+
+
+cl_sd <- df[-1] %>%
+  mutate(Cluster = final$cluster) %>%
+  group_by(Cluster) %>%
+  summarise_all("sd")
+
+```
+
+
+
+```{r}
+#convert the summary tables from long to wide format
+library(tidyr)
+
+median_up <- gather(cl_median, variable, median, diff01_16_decile:diff11_16_decile_wlk, factor_key=TRUE)
+mean_up <- gather(cl_mean, variable, mean, diff01_16_decile:diff11_16_decile_wlk, factor_key=TRUE)
+sd_up <- gather(cl_sd, variable, sd, diff01_16_decile:diff11_16_decile_wlk, factor_key=TRUE)
+
+# combine them all in one dataframe
+up_summary <- cbind(median_up, mean_up[,3], sd_up[,3])
+
+
+# rename the variables
+# I used levels as it is a factor, which helps to order the plot
+levels(median_up$variable)[levels(median_up$variable)=="diff01_16_decile"] <- "SUDI 2016-2001"
+levels(median_up$variable)[levels(median_up$variable)=="diff01_16_decile_compact"] <- "Compactness Domain 2016-2001"
+levels(median_up$variable)[levels(median_up$variable)=="diff01_16_decile_grsp"] <- "Green/Open Space Domain 2016-2001"
+levels(median_up$variable)[levels(median_up$variable)=="diff01_16_decile_wlk"] <- "Walkability Domain 2016-2001"
+
+levels(median_up$variable)[levels(median_up$variable)=="diff01_06_decile"] <- "SUDI 2006-2001"
+levels(median_up$variable)[levels(median_up$variable)=="diff01_06_decile_compact"] <- "Compactness Domain 2006-2001"
+levels(median_up$variable)[levels(median_up$variable)=="diff01_06_decile_grsp"] <- "Green/Open Space Domain 2006-2001"
+levels(median_up$variable)[levels(median_up$variable)=="diff01_06_decile_wlk"] <- "Walkability Domain 2006-2001"
+
+levels(median_up$variable)[levels(median_up$variable)=="diff06_11_decile"] <- "SUDI 2011-2006"
+levels(median_up$variable)[levels(median_up$variable)=="diff06_11_decile_compact"] <- "Compactness Domain 2011-2006"
+levels(median_up$variable)[levels(median_up$variable)=="diff06_11_decile_grsp"] <- "Green/Open Space Domain 2011-2006"
+levels(median_up$variable)[levels(median_up$variable)=="diff06_11_decile_wlk"] <- "Walkability Domain 2011-2006"
+
+levels(median_up$variable)[levels(median_up$variable)=="diff11_16_decile"] <- "SUDI 2016-2011"
+levels(median_up$variable)[levels(median_up$variable)=="diff11_16_decile_compact"] <- "Compactness Domain 2016-2011"
+levels(median_up$variable)[levels(median_up$variable)=="diff11_16_decile_grsp"] <- "Green/Open Space Domain 2016-2011"
+levels(median_up$variable)[levels(median_up$variable)=="diff11_16_decile_wlk"] <- "Walkability Domain 2016-2011"
+
+
+
+
+
+```
+
+
+
+
+```{r}
+# I combine the two datasets so I can use facet wrap
+median_down2 <- median_down
+median_down2$direction <- "Decrease"
+median_down2$Cluster[median_down2$Cluster==1] <- "D1 (n=66)"
+median_down2$Cluster[median_down2$Cluster==2] <- "D2 (n=35)"
+median_down2$Cluster[median_down2$Cluster==3] <- "D3 (n=72)"
+median_down2$Cluster[median_down2$Cluster==4] <- "D4 (n=61)"
+
+median_up2 <- median_up
+median_up2$direction <- "Increase"
+median_up2$Cluster[median_up2$Cluster==1] <- "U1 (n=38)"
+median_up2$Cluster[median_up2$Cluster==2] <- "U2 (n=66)"
+median_up2$Cluster[median_up2$Cluster==3] <- "U3 (n=61)"
+median_up2$Cluster[median_up2$Cluster==4] <- "U4 (n=139)"
+
+combined <- rbind(median_down2, median_up2)
+combined$median <- round(combined$median, 0)
+
+
+library(viridis)
+library(grid)
+
+plot2 <- ggplot(combined, aes(Cluster, variable, fill= median)) + 
+  geom_tile() +
+  geom_text(aes(label=median), family="Arial", fontface='bold', colour = "grey60", size = 2) + # fontface='bold'
+  scale_fill_viridis(option="magma", limits = c(min(median_up$median),max(median_down$median)), direction = -1) +
+  #scale_fill_gradient(limits = c(min(median_up$median),max(median_down$median)), low="#eae2b7", high="#003049") + # I specify the range to be the same in the two plots so they use the same colours
+  scale_y_discrete(limits = rev(levels(combined$variable)),
+                   labels=c("SUDI 2016-2001"="SUDI",
+                            "Compactness Domain 2016-2001"="Compactness Domain", 
+                            "Green/Open Space Domain 2016-2001"="Green/Open Space Domain",
+                            "Walkability Domain 2016-2001"="Walkability Domain",
+                            "SUDI 2006-2001"="SUDI",
+                            "Compactness Domain 2006-2001"="Compactness Domain", 
+                            "Green/Open Space Domain 2006-2001"="Green/Open Space Domain",
+                            "Walkability Domain 2006-2001"="Walkability Domain",
+                            "SUDI 2011-2006"="SUDI",
+                            "Compactness Domain 2011-2006"="Compactness Domain", 
+                            "Green/Open Space Domain 2011-2006"="Green/Open Space Domain",
+                            "Walkability Domain 2011-2006"="Walkability Domain",
+                            "SUDI 2016-2011"="SUDI",
+                            "Compactness Domain 2016-2011"="Compactness Domain", 
+                            "Green/Open Space Domain 2016-2011"="Green/Open Space Domain",
+                            "Walkability Domain 2016-2011"="Walkability Domain")) +
+  #ylim(rev(levels(median_up$variable))) +
+  theme_minimal() +
+  labs(x="",
+       y="") +
+  theme(
+      text = element_text('Arial'),
+      axis.text.x=element_text(angle = 45, hjust = 1, size=8),
+      axis.text.y=element_text(size=8),
+      strip.text = element_text(hjust = 0, size = 10),
+      plot.caption = element_text(face = 'italic'),
+      panel.grid.minor = element_blank(),
+      legend.position = "none",
+      plot.margin = unit(c(1,1,1,1), "cm"),
+      aspect.ratio = 2 # this line plays around with the size of the grids, if I put 0.5 width is larger
+      ) +
+  #coord_equal() +
+  geom_hline(yintercept=4.5) +
+  geom_hline(yintercept=8.5) +
+  geom_hline(yintercept=12.5) +
+  facet_wrap(~direction, scales = "free_x")
+
+# create a dataframe just to store the annotation to be used
+ann_text <- data.frame(x = c(0.1,0.1,0.1,0.1),y = c(14.5, 10.5, 6.5, 2.5),
+                       lab = c("2016-2001", "2006-2001", "2011-2006", "2016-2011"),Cluster=c("test", "test", "test", "test"),
+                       variable=c("test", "test", "test", "test"),
+                       median=c(6,6,6,6),
+                       direction = factor(c("Decrease","Decrease","Decrease","Decrease"),levels = c("Increase","Decrease")))
+
+
+
+plot2 + geom_text(data = ann_text, aes(x=x,y=y,label = lab, vjust = 1), angle = 90,
+                  family="Arial",fontface='bold', size = 2)
+
+final_plot <- plot2 + geom_text(data = ann_text, aes(x=x,y=y,label = lab, vjust = 1), angle = 90,
+                  family="Arial",fontface='bold', size = 2)
+
+
+#png("testing_facets.png", width=1000, height=500, res=1000) # Open a new png file
+png("../outputs/cluster_summary_plot.png",units="in", width=5, height=4, res=300)
+final_plot
+dev.off() # Close the file
+
+```
+
+
+```{r}
+# add an extra column indicating the cluster
+df_temp_cl <- df %>%
+  mutate(Cluster = final$cluster)
+
+# count points by cluster
+df_temp_cl %>% 
+  count(Cluster)
+
+```
+
+```{r}
+library(dplyr)
+df_temp_cl_geo2 <- left_join(CI_2001$Domains_rank[,c("ID")], df_temp_cl, by = "ID")
+
+library(tidyr)
+df_temp_cl_geo2 <- df_temp_cl_geo2 %>% 
+  drop_na(Cluster)
+
+
+```
+
+
+```{r}
+library(tmap)
+tmap_mode("view")
+
+map2 <- tm_shape(df_temp_cl_geo2) +
+  tm_fill("Cluster", style = "cat", 
+          palette = "Set1",
+          alpha = 0.7, title = 'Clusters for grids moved up in SUDI ranking',
+          showNA = FALSE,
+          legend.hist = TRUE,
+          labels = c("U1", "U2", "U3","U4")) +
+  tm_basemap("CartoDB.DarkMatter")
+
+
+tmap_save(map2,
+          width = 1500, height = 1500,
+          dpi = 300, filename = "../outputs/Clusters for grids moved up in SUDI ranking.html")
+```
+
+
+Plot a second inset map
+```{r}
+df_temp_cl_geo_2WGS <- st_transform(df_temp_cl_geo2,WGS84)
+
+# identify the bbox for the inset map showing the Olympic park
+bb_select2 <- bb(extent(-0.045319,0.014420,51.528186,51.560623), projection = WGS84)
+
+```
+
+
+
+```{r}
+tile_2 <- read_osm(bb_select2, ext=1.1, type = "osm")
+
+```
+
+
+
+
+```{r}
+
+tmap_mode("plot")
+OlympicPark_map <- tm_shape(tile_2) +
+  tm_rgb()+
+  tm_shape(df_temp_cl_geo_2WGS, bbox = bb_select2) +
+  tm_fill("Cluster", style = "cat", 
+          palette = "Set1",
+          alpha = 0.7, title = '',
+          showNA = FALSE,legend.show = TRUE,
+          labels = c("U1", "U2", "U3","U4")) +
+  tm_layout(fontfamily = 'Avenir Next Condensed',
+            legend.text.color = "black",
+            legend.text.size = 1,
+            main.title = "A. Olympic Park-Stratford",
+            title.size = 1,
+            title.bg.color = TRUE,
+            legend.position = c("right","top"))
+
+
+png("../outputs/OlympicPark_map.png",units="in", width=15, height=10, res=300)
+OlympicPark_map
+dev.off() # Close the file
+
+
+```
+
+
+```{r}
+
+# put the two inset maps together
+png("../outputs/two_inset_maps.png",units="in", width=10, height=5, res=300)
+tmap_arrange(OlympicPark_map, Ferguslie_map, ncol = 2)
+dev.off() #
+
+```
+
+
+
+
+
+
